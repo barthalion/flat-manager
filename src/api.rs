@@ -4,7 +4,7 @@ use actix_web::{HttpRequest, HttpResponse, Result, ResponseError, web};
 use actix_web::web::{Json, Data, Path};
 use actix_web_actors::ws;
 use actix_multipart::Multipart;
-use actix_web::middleware::BodyEncoding;
+use actix_web::dev::BodyEncoding;
 
 use futures::future;
 use futures::future::{Future};
@@ -149,7 +149,7 @@ pub fn get_job(
     db: Data<Db>,
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims("build", "jobs"))
+    futures::future::maybe_done(req.has_token_claims("build", "jobs"))
         .and_then(move |_|  db.lookup_job(params.id, args.log_offset))
         .and_then(|job| Ok(HttpResponse::Ok().json(job)))
 }
@@ -167,9 +167,9 @@ pub fn create_build(
 )  -> impl Future<Item = HttpResponse, Error = ApiError> {
     let repo1 = args.repo.clone();
     let repo2 = args.repo.clone();
-    futures::done(req.has_token_claims("build", "build"))
-        .and_then(move |_| futures::done(req.has_token_repo(&repo1))
-                  .and_then(move |_| futures::done(config.get_repoconfig(&repo2).map(|rc| rc.clone())) // Ensure the repo exists
+    futures::future::maybe_done(req.has_token_claims("build", "build"))
+        .and_then(move |_| futures::future::maybe_done(req.has_token_repo(&repo1))
+                  .and_then(move |_| futures::future::maybe_done(config.get_repoconfig(&repo2).map(|rc| rc.clone())) // Ensure the repo exists
                             .and_then(move |repoconfig| {
                                 db
                                     .new_build (
@@ -193,7 +193,7 @@ pub fn builds(
     db: Data<Db>,
     req: HttpRequest
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims("build", "build"))
+    futures::future::maybe_done(req.has_token_claims("build", "build"))
         .and_then(move |_| db.list_builds())
         .and_then(move |builds| Ok(HttpResponse::Ok().json(builds)))
 }
@@ -209,7 +209,7 @@ pub fn get_build(
     db: Data<Db>,
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims(&format!("build/{}", params.id), "build")
+    futures::future::maybe_done(req.has_token_claims(&format!("build/{}", params.id), "build")
                   /* We allow getting a build for uploaders too, as it is similar info, and useful */
                   .or_else(|_| req.has_token_claims(&format!("build/{}", params.id), "upload")))
         .and_then(move |_| db.lookup_build(params.id))
@@ -227,7 +227,7 @@ pub fn get_build_ref(
     db: Data<Db>,
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims(&format!("build/{}", params.id), "build"))
+    futures::future::maybe_done(req.has_token_claims(&format!("build/{}", params.id), "build"))
         .and_then(move |_| db.lookup_build_ref(params.id, params.ref_id))
         .and_then(|build_ref| Ok(HttpResponse::Ok().json(build_ref)))
 }
@@ -309,13 +309,13 @@ pub fn create_build_ref (
     db: Data<Db>,
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims(&format!("build/{}", params.id), "upload")
+    futures::future::maybe_done(req.has_token_claims(&format!("build/{}", params.id), "upload")
                   .and_then(|_| validate_ref(&args.ref_name, &req)))
         .and_then(move |_| {
             let build_id = params.id;
             db
                 .lookup_build(params.id)
-                .and_then (move |build| futures::done(req.has_token_repo(&build.repo))
+                .and_then (move |build| futures::future::maybe_done(req.has_token_repo(&build.repo))
                            .and_then (move |_ok| {
                                db.new_build_ref (
                                    NewBuildRef {
@@ -351,7 +351,7 @@ pub fn add_extra_ids (
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
     let ids = args.ids.clone();
-    futures::done(req.has_token_claims(&format!("build/{}", params.id), "upload"))
+    futures::future::maybe_done(req.has_token_claims(&format!("build/{}", params.id), "upload"))
         .and_then (move |_| ids.iter().try_for_each(|id| validate_id(id)))
         .and_then(move |_| {
             let req2 = req.clone();
@@ -504,7 +504,7 @@ fn save_file(
                     .map_err(|e| {
                         actix_multipart::MultipartError::Payload(error::PayloadError::Io(e))
                     });
-                future::result(rt)
+                fut::result(rt)
             })
             .map_err(|e| {
                 ApiError::InternalServerError(e.to_string())
@@ -524,7 +524,7 @@ fn save_file(
                         } else {
                             warn!("Can't get permissions on uploaded file");
                         };
-                        future::result(Ok(res))
+                        fut::result(Ok(res))
                     },
                     Err(e) => future::err(ApiError::InternalServerError(e.to_string()))
                 }
@@ -539,7 +539,7 @@ pub fn upload(
     db: Data<Db>,
     config: Data<Config>,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims(&format!("build/{}", params.id), "upload"))
+    futures::future::maybe_done(req.has_token_claims(&format!("build/{}", params.id), "upload"))
         .and_then(move |_| {
             let uploadstate = Arc::new(UploadState {
                 only_deltas: false,
@@ -569,7 +569,7 @@ pub fn get_commit_job(
     db: Data<Db>,
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims(&format!("build/{}", params.id), "build"))
+    futures::future::maybe_done(req.has_token_claims(&format!("build/{}", params.id), "build"))
         .and_then(move |_|  db.lookup_commit_job(params.id, args.log_offset))
         .and_then(|job| Ok(HttpResponse::Ok().json(job)))
 }
@@ -588,7 +588,7 @@ pub fn commit(
     db: Data<Db>,
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims(&format!("build/{}", params.id), "build"))
+    futures::future::maybe_done(req.has_token_claims(&format!("build/{}", params.id), "build"))
         .and_then(move |_| {
             let req2 = req.clone();
             let build_id = params.id;
@@ -614,7 +614,7 @@ pub fn get_publish_job(
     db: Data<Db>,
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims(&format!("build/{}", params.id), "build"))
+    futures::future::maybe_done(req.has_token_claims(&format!("build/{}", params.id), "build"))
         .and_then(move |_|  db.lookup_publish_job(params.id, args.log_offset))
         .and_then(|job| Ok(HttpResponse::Ok().json(job)))
 }
@@ -630,7 +630,7 @@ pub fn publish(
     db: Data<Db>,
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims(&format!("build/{}", params.id), "publish"))
+    futures::future::maybe_done(req.has_token_claims(&format!("build/{}", params.id), "publish"))
         .and_then(move |_| {
             let build_id = params.id;
             let req2 = req.clone();
@@ -657,7 +657,7 @@ pub fn purge(
     config: Data<Config>,
     req: HttpRequest,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims(&format!("build/{}", params.id), "build"))
+    futures::future::maybe_done(req.has_token_claims(&format!("build/{}", params.id), "build"))
         .and_then (move |_| {
             let build_repo_path = config.build_repo_base.join(params.id.to_string());
             let build_id = params.id;
@@ -749,8 +749,8 @@ pub fn delta_upload(
     req: HttpRequest,
     config: Data<Config>,
 ) -> impl Future<Item = HttpResponse, Error = ApiError> {
-    futures::done(req.has_token_claims("delta", "generate"))
-        .and_then(move |_| futures::done(config.get_repoconfig(&params.repo).map(|rc| rc.clone())))
+    futures::future::maybe_done(req.has_token_claims("delta", "generate"))
+        .and_then(move |_| futures::future::maybe_done(config.get_repoconfig(&params.repo).map(|rc| rc.clone())))
         .and_then(move |repoconfig| {
             let uploadstate = Arc::new(UploadState {
                 only_deltas: true,

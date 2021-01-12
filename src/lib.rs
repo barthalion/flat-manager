@@ -31,8 +31,6 @@ extern crate filetime;
 extern crate num_cpus;
 extern crate time;
 extern crate tokio;
-extern crate tokio_process;
-extern crate tokio_signal;
 extern crate rand;
 
 mod api;
@@ -55,7 +53,7 @@ use diesel::r2d2::{ConnectionManager, ManageConnection};
 use std::path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio_signal::unix::Signal;
+use tokio::signal::unix::Signal;
 use app::Config;
 use deltas::{DeltaGenerator,StopDeltaGenerator};
 use jobs::{JobQueue, StopJobQueue};
@@ -98,15 +96,15 @@ fn start_job_queue(config: &Arc<Config>,
 
 fn handle_signal(sig: i32, server: &Server, job_queue: Addr<JobQueue>, delta_generator: Addr<DeltaGenerator>) -> impl Future<Item = (), Error = std::io::Error> {
     let graceful = match sig {
-        tokio_signal::unix::SIGINT => {
+        tokio::signal::unix::SignalKind::interrupt() => {
             info!("SIGINT received, exiting");
             false
         }
-        tokio_signal::unix::SIGTERM => {
+        tokio::signal::unix::SignalKind::terminate() => {
             info!("SIGTERM received, exiting");
             true
         }
-        tokio_signal::unix::SIGQUIT => {
+        tokio::signal::unix::SignalKind::quit() => {
             info!("SIGQUIT received, exiting");
             false
         }
@@ -128,7 +126,7 @@ fn handle_signal(sig: i32, server: &Server, job_queue: Addr<JobQueue>, delta_gen
         })
         .then( |_| {
             info!("Exiting...");
-            tokio::timer::Delay::new(Instant::now() + Duration::from_millis(300))
+            actix::clock::Delay::new(Instant::now() + Duration::from_millis(300))
         })
         .then( |_| {
             System::current().stop();
@@ -139,9 +137,9 @@ fn handle_signal(sig: i32, server: &Server, job_queue: Addr<JobQueue>, delta_gen
 fn handle_signals(server: Server,
                   job_queue: Addr<JobQueue>,
                   delta_generator: Addr<DeltaGenerator>) {
-    let sigint = Signal::new(tokio_signal::unix::SIGINT).flatten_stream();
-    let sigterm = Signal::new(tokio_signal::unix::SIGTERM).flatten_stream();
-    let sigquit = Signal::new(tokio_signal::unix::SIGQUIT).flatten_stream();
+    let sigint = Signal::new(tokio::signal::unix::SignalKind::interrupt()).flatten_stream();
+    let sigterm = Signal::new(tokio::signal::unix::SignalKind::terminate()).flatten_stream();
+    let sigquit = Signal::new(tokio::signal::unix::SignalKind::quit()).flatten_stream();
     let handle_signals = sigint.select(sigterm).select(sigquit)
         .for_each(move |sig| {
             handle_signal(sig, &server, job_queue.clone(), delta_generator.clone())

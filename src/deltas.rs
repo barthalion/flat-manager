@@ -4,7 +4,6 @@ use actix::dev::ToEnvelope;
 use actix_web::web::Data;
 use app::Config;
 use errors::{DeltaGenerationError};
-use futures::Future;
 use futures::future;
 use ostree;
 use std::collections::{VecDeque,HashMap};
@@ -202,7 +201,7 @@ impl DeltaGenerator {
 }
 
 impl Handler<DeltaRequest> for DeltaGenerator {
-    type Result = ResponseActFuture<Self, (), DeltaGenerationError>;
+    type Result = ResponseActFuture<Self, Result<(), DeltaGenerationError>>;
 
     fn handle(&mut self, msg: DeltaRequest, ctx: &mut Self::Context) -> Self::Result {
         Box::new(self.handle_request(msg, ctx).into_actor(self))
@@ -210,7 +209,7 @@ impl Handler<DeltaRequest> for DeltaGenerator {
 }
 
 impl Handler<DeltaRequestSync> for DeltaGenerator {
-    type Result = ResponseActFuture<Self, (), ()>;
+    type Result = ResponseActFuture<Self, Result<(), ()>>;
 
     fn handle(&mut self, msg: DeltaRequestSync, ctx: &mut Self::Context) -> Self::Result {
         let request = msg.delta_request.clone();
@@ -295,7 +294,7 @@ impl Actor for LocalWorker {
 }
 
 impl Handler<DeltaRequest> for LocalWorker {
-    type Result = ResponseActFuture<Self, (), DeltaGenerationError>;
+    type Result = ResponseActFuture<Self, Result<(), DeltaGenerationError>>;
 
     fn handle(&mut self, msg: DeltaRequest, _ctx: &mut Self::Context) -> Self::Result {
         let repoconfig = match self.config.get_repoconfig(&msg.repo) {
@@ -406,7 +405,7 @@ impl RemoteWorker {
         }
     }
 
-    fn msg_register(&mut self, capacity: u32, ctx: &mut ws::WebsocketContext<Self>) {
+    fn msg_register(&mut self, capacity: u32, ctx: &mut Context<Self>) {
         let addr = ctx.address();
         ctx.spawn(
             self.generator
@@ -437,7 +436,7 @@ impl RemoteWorker {
                 }));
     }
 
-    fn msg_unregister(&mut self, ctx: &mut ws::WebsocketContext<Self>) {
+    fn msg_unregister(&mut self, ctx: &mut Context<Self>) {
         /* This stops assigning jobs for the worker, but keeps
          * outstanding jobs running */
 
@@ -456,7 +455,7 @@ impl RemoteWorker {
         }
     }
 
-    fn msg_finished(&mut self, id: u32, errmsg: Option<String>, _ctx: &mut ws::WebsocketContext<Self>) {
+    fn msg_finished(&mut self, id: u32, errmsg: Option<String>, _ctx: &mut Context<Self>) {
         match self.outstanding.remove(&id) {
             Some(mut item) => {
                 item.delayed_result.set(match errmsg {
@@ -468,7 +467,7 @@ impl RemoteWorker {
         }
     }
 
-    fn message(&mut self, message: RemoteClientMessage, ctx: &mut ws::WebsocketContext<Self>) {
+    fn message(&mut self, message: RemoteClientMessage, ctx: &mut Context<Self>) {
         match message {
             RemoteClientMessage::Register { capacity } => self.msg_register(capacity, ctx),
             RemoteClientMessage::Unregister => self.msg_unregister(ctx),
@@ -476,7 +475,7 @@ impl RemoteWorker {
         }
     }
 
-    fn run_heartbeat(&self, ctx: &mut ws::WebsocketContext<Self>) {
+    fn run_heartbeat(&self, ctx: &mut Context<Self>) {
         ctx.run_interval(HEARTBEAT_INTERVAL, |worker, ctx| {
             if Instant::now().duration_since(worker.last_recieved_ping) > CLIENT_TIMEOUT {
                 warn!("Delta worker heartbeat missing, disconnecting!");
@@ -488,7 +487,7 @@ impl RemoteWorker {
 }
 
 impl Handler<DeltaRequest> for RemoteWorker {
-    type Result = ResponseActFuture<Self, (), DeltaGenerationError>;
+    type Result = ResponseActFuture<Self, Result<(), DeltaGenerationError>>;
 
     fn handle(&mut self, msg: DeltaRequest, ctx: &mut Self::Context) -> Self::Result {
         let url = {
@@ -518,7 +517,7 @@ impl Handler<DeltaRequest> for RemoteWorker {
 }
 
 impl Actor for RemoteWorker {
-    type Context = ws::WebsocketContext<Self>;
+    type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
         // Kick off heartbeat process
@@ -541,7 +540,7 @@ impl Actor for RemoteWorker {
     }
 }
 
-impl StreamHandler<ws::Message, ws::ProtocolError> for RemoteWorker {
+impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RemoteWorker {
     fn handle(&mut self, msg: ws::Message, ctx: &mut Self::Context) {
         match msg {
             ws::Message::Ping(msg) => {

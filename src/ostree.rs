@@ -8,8 +8,7 @@ use std::str;
 use walkdir::WalkDir;
 use hex;
 use std::process::Command;
-use tokio_process::CommandExt;
-use std::os::unix::process::CommandExt as UnixCommandExt;
+use std::os::unix::process::CommandExt;
 use futures::Future;
 use futures::future::Either;
 use std::path::{PathBuf};
@@ -861,7 +860,7 @@ pub fn pull_delta_async(n_retries: i32,
         if let Some(ref from) = delta.from {
             Either::A(pull_commit_async(n_retries, repo_path.clone(), url.clone(), from.clone()))
         } else {
-            Either::B(future::result(Ok(())))
+            Either::B(result(Ok(())))
         }
         .and_then(move |_| pull_commit_async(n_retries, repo_path_clone, url_clone, to))
     )

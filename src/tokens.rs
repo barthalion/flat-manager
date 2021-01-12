@@ -3,10 +3,13 @@ use actix_web::http::header::{HeaderValue, AUTHORIZATION};
 use actix_service::{Service, Transform};
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::error::Error;
-use futures::{Future, Poll};
-use futures::future::{ok, Either, FutureResult};
+use futures::future::Future;
 use jwt::{decode, Validation, DecodingKey};
 use std::rc::Rc;
+use fut::Either;
+use fut::ok;
+use fut::FutureResult;
+use tokio::macros::support::Poll;
 
 use app::Claims;
 use errors::ApiError;

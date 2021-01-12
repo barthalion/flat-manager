@@ -1,7 +1,8 @@
-use futures::{task, Future,Async,Poll};
+use futures::future::Future;
 use std::collections::HashMap;
 use std::cell::{Cell,RefCell};
 use std::rc::Rc;
+use tokio::macros::support::Poll;
 
 #[derive(Debug)]
 struct InnerDelayedResult<T,E> {

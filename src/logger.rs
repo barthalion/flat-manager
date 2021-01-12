@@ -5,10 +5,12 @@ use actix_web::dev::{BodySize, MessageBody, ResponseBody,ServiceRequest, Service
 use actix_web::error::Error;
 use actix_web::http::StatusCode;
 use std::rc::Rc;
-use futures::{Async, Future, Poll};
-use futures::future::{ok, FutureResult};
+use futures::future::Future;
+use fut::FutureResult;
 use std::marker::PhantomData;
 use bytes::Bytes;
+use tokio::macros::support::Poll;
+use fut::ok;
 
 use tokens::ClaimsValidator;
 
@@ -155,7 +157,7 @@ where
     type Error = Error;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let res = futures::try_ready!(self.fut.poll());
+        let res = futures::ready!(self.fut.poll())?;
 
         if let Some(error) = res.response().error() {
             if res.response().head().status != StatusCode::INTERNAL_SERVER_ERROR {

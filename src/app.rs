@@ -31,6 +31,7 @@ use ostree;
 use Pool;
 use db::Db;
 
+
 // Ensure we strip out .. and other risky things to avoid escaping out of the base dir
 fn canonicalize_path(path: &str) -> Result<PathBuf, actix_web::Error> {
     let mut buf = PathBuf::new();
